@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="../../plugins/element-ui/index.css"/>
+    <link rel="stylesheet" href="../../styles/common.css"/>
+    <link rel="stylesheet" href="../../styles/page.css"/>
+    <style>
+        #product-app .notAdmin::after {
+            border: 0 !important;
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container" id="product-app">
+    <div class="container">
+        <div class="searchBar">
+            <el-input
+                    v-model="customerName"
+                    placeholder="请输入客户姓名"
+                    style="width: 250px"
+                    clearable
+            ></el-input>
+        </div>
+        <el-table
+                :data="tableData"
+                stripe
+                class="tableBox"
+        >
+            <el-table-column
+                    prop="name"
+                    label="产品名称"
+            ></el-table-column>
+            <el-table-column label="产品类别">
+                <template slot-scope="scope">
+                    <span v-if="String(scope.row.type) === '0'">服装</span>
+                    <span v-else-if="String(scope.row.type) === '1'">食品</span>
+                    <span v-else>文具</span>
+                </template>
+            </el-table-column>
+            <!--              prop="type"-->
+            <el-table-column
+                    prop="quantity"
+                    label="库存数量"
+            ></el-table-column>
+            <el-table-column
+                    prop="unitPrice"
+                    label="单位价格"
+            ></el-table-column>
+            <el-table-column label="数量">
+                <template slot-scope="scope">
+                    <el-input-number
+                            v-model="scope.row.num"
+                            :min="0"
+                            :step="1"
+                            placeholder="请输入数量"
+                            @change="validateQuantity(scope.row)"
+                    ></el-input-number>
+                </template>
+            </el-table-column>
+
+            <el-table-column label="总价">
+                <template slot-scope="scope">
+                    {{ (scope.row.num ? scope.row.num : 0 ) * scope.row.unitPrice }}
+                </template>
+            </el-table-column>
+
+        </el-table>
+        <el-pagination
+                class="pageList"
+                :page-sizes="[10, 20, 30, 40]"
+                :page-size="pageSize"
+                layout="total, sizes, prev, pager, next, jumper"
+                :total="counts"
+                :current-page.sync="page"
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+        ></el-pagination>
+    </div>
+    <div class="submitBar">
+        <div class="totalAmount">
+            总金额: {{ calculateTotalAmount() }}
+        </div>
+        <div class="centerAlign">
+            <el-button type="primary" @click="submitOrder" class="submitBtn" :disabled="!customerName || disableSubmitButton">提交</el-button>
+        </div>
+    </div>
+</div>
+<!-- 开发环境版本，包含了有帮助的命令行警告 -->
+<script src="../../plugins/vue/vue.js"></script>
+<!-- 引入组件库 -->
+<script src="../../plugins/element-ui/index.js"></script>
+<!-- 引入axios -->
+<script src="../../plugins/axios/axios.min.js"></script>
+<script src="../../js/request.js"></script>
+<script src="../../api/salesOrders.js"></script>
+<script src="../../api/products.js"></script>
+<script>
+    new Vue({
+        el: '#product-app',
+        data() {
+            return {
+                input: '',
+                counts: 0,
+                page: 1,
+                pageSize: 10,
+                tableData: [],
+                user: '',
+                totalAmount: 0,
+                customerName: '',
+            }
+        },
+        computed: {
+            disableSubmitButton() {
+                return this.tableData.some(row => row.num === undefined);
+            },
+        },
+        created() {
+            this.init()
+            this.user = JSON.parse(localStorage.getItem('userInfo')).username
+
+        },
+        methods: {
+
+            calculateTotalAmount() {
+                let total = 0;
+                for (let i = 0; i < this.tableData.length; i++) {
+                    const product = this.tableData[i];
+                    total += (product.num ?  product.num : 0 ) * product.unitPrice;
+                }
+                this.totalAmount = total;
+                return this.totalAmount;
+            },
+
+            async submitOrder() {
+                // 构建要发送的数据对象
+                const dataToSend = {
+                    items: [],
+                    totalAmount: this.totalAmount,
+                    customerName: this.customerName
+                };
+
+                // 遍历tableData获取每组数据的id和num
+                for (let i = 0; i < this.tableData.length; i++) {
+                    const product = this.tableData[i];
+                    const item = {
+                        id: product.id,
+                        quantity: product.quantity,
+                        num: product.num,
+                        unitPrice: product.unitPrice,
+                    };
+                    dataToSend.items.push(item);
+                }
+
+                console.log(dataToSend);
+                // 发送数据到后台
+
+                await axios.post('/salesOrders', dataToSend)
+                    .then(res => {
+                            if (String(res.data.code) === '1') {
+                                this.$message.success("订单已确认！")
+                                window.location.href = 'list.html';
+                            }
+                    })
+                    .catch(error => {
+                        console.error("操作失败");
+                    });
+            },
+            validateQuantity(row) {
+                if (row.num >= row.initialStock) {
+                    row.num = row.initialStock; // 限制销售数量不超过初始库存
+                }
+                row.quantity = row.initialStock - row.num;// 更新库存数量
+                this.calculateTotalPrice(row);
+            },
+            calculateTotalPrice(row) {
+                row.totalPrice = row.unitPrice * row.quantity;
+            },
+            async init() {
+                const params = {
+                    page: this.page,
+                    pageSize: this.pageSize,
+                    name: this.input ? this.input : undefined
+                }
+                await getProductList(params).then(res => {
+                    if (String(res.code) === '1') {
+                        // console.log(res.data.records);
+                        this.tableData = res.data.records || []
+                        this.counts = res.data.total
+                        this.tableData.forEach(product => {
+                            product.initialStock = product.quantity;
+                        });
+                    }
+                }).catch(err => {
+                    this.$message.error('请求出错了：' + err)
+                })
+            },
+            handleQuery() {
+                this.page = 1
+            },
+            addProductHandle(action) {
+                if (action === 'add') {
+                    window.parent.menuHandle(
+                        {
+                            id: '2',
+                            url: '/backend/page/products/add.html',
+                            name: '添加产品'
+                        },
+                        true
+                    )
+                } else {
+                    window.parent.menuHandle(
+                        {
+                            id: '2',
+                            url: '/backend/page/products/add.html?id=' + action,
+                            name: '编辑产品'
+                        },
+                        true
+                    )
+                }
+            },
+            addProductsHandle(st) {
+                if (st === 'add') {
+                    window.parent.menuHandle({
+                        id: '5',
+                        url: '/backend/page/products/add.html',
+                        name: '添加员工'
+                    }, true)
+                } else {
+                    window.parent.menuHandle({
+                        id: '5',
+                        url: '/backend/page/products/add.html?id=' + st,
+                        name: '修改员工'
+                    }, true)
+                }
+            },
+            deleteProductHandle(id) {
+                this.$confirm('确认删除该产品?', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    deleteProduct(id).then(res => {
+                        // console.log('deleteProduct', res)
+                        if (String(res.code) === '1') {
+                            this.$message.success('产品删除成功！')
+                            this.handleQuery()
+                        }
+                    }).catch(err => {
+                        this.$message.error('请求出错了：' + err)
+                    })
+                })
+            },
+            handleSizeChange(val) {
+                this.pageSize = val
+                this.init()
+            },
+            handleCurrentChange(val) {
+                this.page = val
+                this.init()
+            }
+        }
+    })
+</script>
+</body>
+</html>

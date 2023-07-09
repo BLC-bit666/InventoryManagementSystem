@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Order Details</title>
+    <!-- 引入样式 -->
+    <link rel="stylesheet" href="../../plugins/element-ui/index.css"/>
+    <link rel="stylesheet" href="../../styles/common.css"/>
+    <link rel="stylesheet" href="../../styles/page.css"/>
+    <style>
+        #purchase-order-details-app .notAdmin::after {
+            border: 0 !important;
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard-container" id="purchase-order-details-app">
+    <div class="container">
+    </div>
+    <el-table
+            :data="tableData"
+            stripe
+            class="tableBox"
+    >
+        <el-table-column
+                prop="id"
+                label="产品编号"
+        ></el-table-column>
+        <el-table-column
+                prop="quantity"
+                label="数量"
+        ></el-table-column>
+        <el-table-column
+                prop="unitPrice"
+                label="单价"
+        ></el-table-column>
+        <el-table-column
+                label="总价"
+        >
+            <template slot-scope="scope">
+                {{ scope.row.unitPrice * scope.row.quantity }}
+            </template>
+        </el-table-column>
+    </el-table>
+    <el-row>
+        <el-col :span="12" >
+            <div style="text-align: right; margin-top: 20px;">
+                <span style="font-weight: bold;">订单总价: </span>
+                {{ calculateTotalPrice() }}
+            </div>
+        </el-col>
+    </el-row>
+    <el-pagination
+            class="pageList"
+            :page-sizes="[10, 20, 30, 40]"
+            :page-size="pageSize"
+            layout="total, sizes, prev, pager, next, jumper"
+            :total="counts"
+            :current-page.sync="page"
+            @size-change="handleSizeChange"
+            @current-change="handleCurrentChange"
+    ></el-pagination>
+</div>
+</div>
+<!-- 开发环境版本，包含了有帮助的命令行警告 -->
+<script src="../../plugins/vue/vue.js"></script>
+<!-- 引入组件库 -->
+<script src="../../plugins/element-ui/index.js"></script>
+<!-- 引入axios -->
+<script src="../../plugins/axios/axios.min.js"></script>
+<script src="../../js/request.js"></script>
+<script src="../../api/purchaseOrderDetails.js"></script>
+<script>
+    new Vue({
+        el: '#purchase-order-details-app',
+        data() {
+            return {
+                input: '',
+                counts: 0,
+                page: 1,
+                pageSize: 10,
+                tableData: [],
+                user: '',
+                id: ''
+            }
+        },
+        created() {
+            var url = location.href
+            var arrStr = url.substring(url.indexOf("?") + 1).split("&")
+            for (var i = 0; i < arrStr.length; i++) {
+                var loc = arrStr[i].indexOf( 'id' + "=")
+                if (loc != -1) {
+                    this.id = arrStr[i].replace('id' + "=", "").replace("?", "")
+                }
+            }
+            console.log("99999999999999" + this.id)
+            this.init()
+            this.user = JSON.parse(localStorage.getItem('userInfo')).username
+        },
+        methods: {
+            async init() {
+                const params = {
+                    page: this.page,
+                    pageSize: this.pageSize,
+                    id: this.id
+                }
+                await getPurchaseOrderDetailsList(params).then(res => {
+                    console.log(res);
+                    if (String(res.code) === '1') {
+                        this.tableData = res.data.records || []
+                        this.counts = res.data.total
+                    }
+                }).catch(err => {
+                    this.$message.error('请求出错了：' + err)
+                })
+            },
+            handleQuery() {
+                this.page = 1
+                this.init()
+            },
+            handleSizeChange(val) {
+                this.pageSize = val
+                this.init()
+            },
+            handleCurrentChange(val) {
+                this.page = val
+                this.init()
+            },
+            calculateTotalPrice() {
+                let totalPrice = 0;
+                this.tableData.forEach(row => {
+                    totalPrice += row.unitPrice * row.quantity;
+                });
+                return totalPrice;
+            }
+        }
+    })
+</script>
+</body>
+</html>
